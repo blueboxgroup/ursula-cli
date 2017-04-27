@@ -584,8 +584,6 @@ def parse_args():
                 'This can be specified multiple times, or once with '
                 'parameters separated by a semicolon.',
            action='append')
-    parser.add_argument('--vagrant', action='store_true',
-                        help='Provision environment in vagrant')
     parser.add_argument('--ursula-sudo', action='store_true',
                         help='Enable sudo')
     return parser.parse_known_args()
@@ -598,9 +596,6 @@ def main():
         if args.ursula_debug:
             log_level = logging.DEBUG
         _initialize_logger(log_level)
-        if args.vagrant:
-            LOG.warn("--vagrant is depreciated, use --provisioner=vagrant")
-            args.provisioner = "vagrant"
         _check_ansible_version()
         if not args.ursula_user:
             if args.provisioner == 'vagrant':
