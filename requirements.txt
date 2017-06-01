@@ -1,5 +1,4 @@
 ansible>=2.1.0.0,<3,<2.2
-six
 pbr
 PyYAML
 python-keystoneclient
