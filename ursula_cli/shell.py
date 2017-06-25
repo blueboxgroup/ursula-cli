@@ -23,6 +23,7 @@ import socket
 import logging
 import argparse
 import subprocess
+import vagrant
 from distutils.version import LooseVersion
 from ConfigParser import ConfigParser, NoOptionError, NoSectionError
 
@@ -183,28 +184,17 @@ def _run_module(inventory, module, module_args, module_hosts='all',
     return proc.returncode
 
 
-def _vagrant_ssh_config(environment, boxes):
+def _vagrant_ssh_config(environment, vms):
+    v = vagrant.Vagrant()
     rel_ssh_config_file = os.path.join(environment, ".ssh_config")
     ssh_config_file = os.path.abspath(rel_ssh_config_file)
+
+    ssh_config = []
+    for vm in vms:
+        ssh_config.append(v.ssh_config(vm_name=vm))
     f = open(ssh_config_file, 'w')
-    for box in boxes:
-        command = [
-            'vagrant',
-            'ssh-config',
-            box
-        ]
-        proc = subprocess.Popen(command, env=os.environ.copy(),
-                                shell=False,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT)
-
-        for line in iter(proc.stdout.readline, b''):
-            f.write("%s\n" % line.rstrip())
-
-        if proc.returncode:
-            raise Exception("Failed to write SSH config to %s"
-                            % (ssh_config_file))
-
+    for server in ssh_config:
+        f.write("%s\n" % server.rstrip())
     f.close()
 
     if 'not yet ready for SSH' in open(ssh_config_file).read():
@@ -409,6 +399,8 @@ def _vagrant_copy_yml(environment):
 
 
 def _run_vagrant(environment):
+    log_cm = vagrant.make_file_cm('vagrant.log')
+    v = vagrant.Vagrant(out_cm=log_cm, err_cm=log_cm)
     vagrant_config_file = "%s/vagrant.yml" % environment
 
     if os.path.isfile(vagrant_config_file):
@@ -419,37 +411,31 @@ def _run_vagrant(environment):
 
     vms = vagrant_config['vms'].keys()
 
-    command = [
-        'vagrant',
-        'up',
-        '--no-provision',
-    ] + vagrant_config['vms'].keys()
-
-    LOG.debug("Running command: %s\nEnvs:%s", " ".join(command), os.environ)
-    proc = subprocess.Popen(command, env=os.environ.copy(),
-                            shell=False,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT)
-
-    for line in iter(proc.stdout.readline, b''):
-        print line.rstrip()
-
-    if proc.returncode:
-        raise Exception(
-            "Failed to run %s with environment: %s"
-            % (" ".join(command), os.environ)
-        )
-
+    nothing_up = True
+    log_cm = vagrant.make_file_cm('vagrant.log')
+    for vm in v.status():
+        if vm.state == "running":
+            nothing_up = False
+    print "View Vagrant status at vagrant.log"
+    if nothing_up:
+        print "Starting %s" % vms
+        v.up()
     else:
-        print "**************************************************"
-        print "Ursula <3 Vagrant"
-        print "To interact with your environment via Vagrant set:"
-        print "$ export SETTINGS_FILE=%s" % vagrant_config_file
-        print "**************************************************"
+        for vm in vms:
+            state = v.status(vm_name=vm)[0].state
+            if state == "not_created":
+                print "Starting %s" % vm
+                v.up(vm_name=vm)
 
-        rc = _vagrant_ssh_config(environment, vms)
-        if rc:
-            return rc
+    rc = _vagrant_ssh_config(environment, vms)
+    if rc:
+        return rc
+
+    print "**************************************************"
+    print "Ursula <3 Vagrant"
+    print "To interact with your environment via Vagrant set:"
+    print "$ export SETTINGS_FILE=%s" % vagrant_config_file
+    print "**************************************************"
 
     return 0
 

@@ -3,3 +3,4 @@ pbr
 PyYAML
 python-keystoneclient
 python-heatclient
+python-vagrant
